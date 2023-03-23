@@ -61,4 +61,4 @@ LunarLander-v2 fro OpenAI Gym
 	- Hidden_2b: (action_size, 128)			        - function unit: ReLU
 	- Hidden_2c: (num_atoms, 128)			        - function unit: ReLU
 	- Hidden_2: (Hidden_2a + Hidden_2b + Hidden_2c) - function unit: ReLU
-    - Output: (128, num_atoms)                      - function unit: ReLU
+    - Output: (128, num_atoms)                      - function unit: LogSoftmax
