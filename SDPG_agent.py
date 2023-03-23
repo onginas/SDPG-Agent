@@ -29,7 +29,7 @@ class SDPGAgent(BaseAgent):
         # set basic parameters of agent
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.discount = 0.99
+        self.discount = 0.96
         self.target_network_mix = 1e-3
         self.device = device
         self.n_step = 0
@@ -38,7 +38,7 @@ class SDPGAgent(BaseAgent):
         self.buffer_size = int(1e6)
         self.batch_size = 180
         self.seed = 0
-        self.NUM_ATOMS = 100
+        self.NUM_ATOMS = 51
         self.obs_state_range = obs_state_range
         self.action_range = action_range
         self.gamma = torch.from_numpy(np.vstack([self.discount**i for i in range(self.batch_size)])).float().to(self.device)
@@ -129,7 +129,7 @@ class SDPGAgent(BaseAgent):
         
         # calculate differences between z_target_distribution and z_distribution_sorted
         z_target = z_target[:, None, :]
-        z_target, _ = torch.sort(z_target, dim = 2, descending = False)
+        #z_target, _ = torch.sort(z_target, dim = 2, descending = False)
         
         z_j = z_j[:, :, None]
         z_j, _ = torch.sort(z_j, dim = 1, descending = False)
@@ -145,6 +145,7 @@ class SDPGAgent(BaseAgent):
         critic_losses = torch.mean(torch.mean(torch.mean(huber_loss,2, keepdim = True), 1, keepdim = False), 0, keepdim = False).to(self.device)
         
         # Compute actor loss
+        b_states.requires_grad_(True)
         action_preds = self.network.action(b_states).to(self.device).requires_grad_(True)
         action_losses_mean  = self.network.calculate_action_grad(b_states, action_preds, q_j)
         
@@ -155,7 +156,7 @@ class SDPGAgent(BaseAgent):
 
         # maximizethe losses
         self.network.zero_grad()
-        action_preds.backward(gradient = action_losses_mean)
+        action_preds.backward(gradient = action_losses_mean, inputs = b_states)
         action_preds = action_preds[:].mean(dim = 0).to(self.device)
         self.network.actor_opt.step()
         
