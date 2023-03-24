@@ -82,7 +82,7 @@ class DeterministicActorCriticNet(nn.Module):
         #z_j_data = torch.nn.functional.log_softmax(self.fc_critic(self.critic_body.forward(data_phi, data_action, data_q)), dim = -1)
         
         # set input zero gradients
-        grad_zeros = torch.zeros_like(z_j_data)
+        grad_zeros = torch.ones_like(z_j_data)
         
         # calculate gradients
         grads = torch.autograd.grad(z_j_data, data_action, grad_outputs=grad_zeros, retain_graph=True)
