@@ -164,12 +164,13 @@ class SDPGAgent(BaseAgent):
         # minimize the critic losses
         self.network.zero_grad()
         critic_losses.mean().backward()
+        torch.nn.utils.clip_grad_norm_(self.network.critic_params, 1)
         self.network.critic_opt.step()           
 
         # maximizethe losses
         self.network.zero_grad()
-        action_preds.backward(gradient = action_losses_mean, inputs = b_states, retain_graph=True)
-        action_preds = action_preds[:].mean(dim = 0).to(self.device)
+        action_preds.mean(dim = 0).backward(gradient = torch.mean(action_losses_mean, dim = 0), retain_graph=True)
+        torch.nn.utils.clip_grad_norm_(self.network.actor_params, 1)
         self.network.actor_opt.step()
         
         # update params of target neural network
