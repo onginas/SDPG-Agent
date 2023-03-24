@@ -29,31 +29,33 @@ class SDPGAgent(BaseAgent):
         # set basic parameters of agent
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.discount = 0.96
-        self.target_network_mix = 1e-3
+        self.discount = 0.99
+        self.target_network_mix = 1e-4
         self.device = device
         self.n_step = 0
         self.train_step = 0
         self.warm_up = 5
-        self.buffer_size = int(1e6)
-        self.batch_size = 180
+        self.buffer_size = 256
+        self.batch_size = 256
         self.seed = 0
-        self.NUM_ATOMS = 51
+        self.NUM_ATOMS = 80
         self.obs_state_range = obs_state_range
         self.action_range = action_range
         self.gamma = torch.from_numpy(np.vstack([self.discount**i for i in range(self.batch_size)])).float().to(self.device)
+        self.gamma = self.gamma[:,None,:]
+        
         # create local network
         self.network =  DeterministicActorCriticNet(self.state_dim, self.action_dim, self.obs_state_range,  self.action_range, self.NUM_ATOMS,
-                                                                   actor_optim_fn  = lambda params: torch.optim.NAdam(params, lr=1e-4),
-                                                                   critic_optim_fn = lambda params: torch.optim.NAdam(params, lr=1e-4), 
-                                                                   actor_body = FCBody(self.state_dim, hidden_units = (400, 128), function_unit = F.relu),
-                                                                   critic_body = CriticBody(self.state_dim,  self.action_dim,  self.NUM_ATOMS, hidden_units = (128, 128), function_unit = F.relu), device=device)
+                                                                   actor_optim_fn  = lambda params: torch.optim.Adam(params, lr=1e-4),
+                                                                   critic_optim_fn = lambda params: torch.optim.Adam(params, lr=1e-4), 
+                                                                   actor_body = FCBody(self.state_dim, hidden_units = (400, 300), function_unit = F.relu),
+                                                                   critic_body = CriticBody(self.state_dim,  self.action_dim,  self.NUM_ATOMS, hidden_units = (400, 300), function_unit = F.relu), device=device)
         # create target network
         self.target_network = DeterministicActorCriticNet(self.state_dim, self.action_dim, self.obs_state_range,  self.action_range, self.NUM_ATOMS,
-                                                                   actor_optim_fn  = lambda params: torch.optim.NAdam(params, lr=1e-4),
-                                                                   critic_optim_fn = lambda params: torch.optim.NAdam(params, lr=1e-4), 
-                                                                   actor_body = FCBody(self.state_dim, hidden_units = (400, 128), function_unit = F.relu),
-                                                                   critic_body = CriticBody(self.state_dim,  self.action_dim,  self.NUM_ATOMS, hidden_units = (128, 128), function_unit = F.relu), device=device)
+                                                                   actor_optim_fn  = lambda params: torch.optim.Adam(params, lr=1e-4),
+                                                                   critic_optim_fn = lambda params: torch.optim.Adam(params, lr=1e-4), 
+                                                                   actor_body = FCBody(self.state_dim, hidden_units = (400, 300), function_unit = F.relu),
+                                                                   critic_body = CriticBody(self.state_dim,  self.action_dim,  self.NUM_ATOMS, hidden_units = (400, 300), function_unit = F.relu), device=device)
         
         # copy parameters to target network from local network
         self.target_network.load_state_dict(self.network.state_dict())
@@ -115,6 +117,16 @@ class SDPGAgent(BaseAgent):
         # choose random sample from object
         b_states, b_actions, b_rewards, b_next_states, b_dones, q_j, q_j_target = self.replay_buffer.sample()
         
+        # add dimension
+        b_states = b_states[:,None,:]
+        b_actions = b_actions[:,None,:]
+        b_rewards = b_rewards[:,None,:]
+        b_next_states = b_next_states[:,None,:]
+        b_dones = b_dones[:,None,:]
+        q_j = q_j[:,None,:]
+        q_j_target = q_j_target[:,None,:]
+        
+        
         # predict next action from next states
         with torch.no_grad():
             b_next_actions = self.target_network.action(b_next_states)
@@ -122,41 +134,41 @@ class SDPGAgent(BaseAgent):
         # calculate z target distribution
         with torch.no_grad():
             z_target =  torch.div(b_rewards, 100) + self.gamma * self.target_network.critic(b_next_states, b_next_actions, q_j_target) * (1 - b_dones)
-
-        z_target.requires_grad_(False) 
- 
-        z_j = self.network.critic(b_states, b_actions, q_j)#.requires_grad_(True)
+            z_target = torch.transpose(z_target, 1, 2)
+            #z_target, _ = torch.sort(z_target, dim = 2, descending = False)
+        z_target.requires_grad_(False)
+        
+        
+        #calculate z_j
+        z_j = self.network.critic(b_states, b_actions, q_j).requires_grad_(True)
+        
         
         # calculate differences between z_target_distribution and z_distribution_sorted
-        z_target = z_target[:, None, :]
-        #z_target, _ = torch.sort(z_target, dim = 2, descending = False)
-        
-        z_j = z_j[:, :, None]
         z_j, _ = torch.sort(z_j, dim = 1, descending = False)
         
         diff_distribution = z_target - z_j
 
-        
         #calculate mean of Huber quantile loss
         zeros_array = torch.zeros(diff_distribution.shape).to(self.device)
         tau = torch.from_numpy(np.array([(2*(i+1) - 1)/(2*self.NUM_ATOMS) for i in range(self.NUM_ATOMS)])).to(self.device)
         inv_tau = 1.0 - tau
         huber_loss = torch.where(torch.less(diff_distribution, 0.0), inv_tau * torch.nn.functional.huber_loss(diff_distribution, zeros_array, reduction = 'none', delta = 1.0),tau * torch.nn.functional.huber_loss(diff_distribution, zeros_array, reduction = 'none', delta = 1.0)).to(self.device)
-        critic_losses = torch.mean(torch.mean(torch.mean(huber_loss,2, keepdim = True), 1, keepdim = False), 0, keepdim = False).to(self.device)
+        critic_losses = torch.mean(torch.mean(huber_loss,dim = 1, keepdim = True), dim = 1, keepdim = False).to(self.device)
         
         # Compute actor loss
         b_states.requires_grad_(True)
         action_preds = self.network.action(b_states).to(self.device).requires_grad_(True)
-        action_losses_mean  = self.network.calculate_action_grad(b_states, action_preds, q_j)
+        z_j_act = self.network.critic(b_states, action_preds, q_j).requires_grad_(True)
+        action_losses_mean = self.network.calculate_action_grad(z_j_act, action_preds)
         
         # minimize the critic losses
         self.network.zero_grad()
-        critic_losses.backward()
+        critic_losses.mean().backward()
         self.network.critic_opt.step()           
 
         # maximizethe losses
         self.network.zero_grad()
-        action_preds.backward(gradient = action_losses_mean, inputs = b_states)
+        action_preds.backward(gradient = action_losses_mean, inputs = b_states, retain_graph=True)
         action_preds = action_preds[:].mean(dim = 0).to(self.device)
         self.network.actor_opt.step()
         

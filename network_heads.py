@@ -31,8 +31,8 @@ class DeterministicActorCriticNet(nn.Module):
         self.phi_body = phi_body.to(device)
         self.actor_body = actor_body.to(device)
         self.critic_body = critic_body.to(device)
-        self.v_min_critic = -20
-        self.v_max_critic =  0
+        self.v_min_critic = 0
+        self.v_max_critic =  10
         self.v_min_actor = action_range[0]
         self.v_max_actor = action_range[1]
         self.num_atoms = num_atoms
@@ -57,28 +57,39 @@ class DeterministicActorCriticNet(nn.Module):
     
     # prediction for actor's neural network
     def action(self, phi):
-        return torch.tanh(self.fc_action(self.actor_body.forward(phi)).to(self.device)).to(self.device)
-        #return torch.tensor(0.5).to(self.device) * (torch.tensor(self.v_max_actor + self.v_min_actor)+torch.tensor((self.v_max_actor - self.v_min_actor))*torch.tanh(self.fc_action(self.actor_body.forward(phi)))).to(self.device)
+        #return torch.tanh(self.fc_action(self.actor_body.forward(phi)).to(self.device)).to(self.device)
+        return torch.tensor(0.5).to(self.device) * (torch.tensor(self.v_max_actor + self.v_min_actor)+torch.tensor((self.v_max_actor - self.v_min_actor))*torch.tanh(self.fc_action(self.actor_body.forward(phi)))).to(self.device)
    
     # prediction for critic's neural network
     def critic(self, data_phi, data_action, data_q):
         
-        #probs = [torch.tensor(0.5) * (torch.tensor(self.v_max_critic + self.v_min_critic)+torch.tensor((self.v_max_critic - self.v_min_critic))*torch.tanh(self.fc_critic(self.critic_body.forward(phi, action, q)))).to(self.device) for phi, action, q in zip(data_phi, data_action, data_q)]
-        probs = [torch.nn.functional.log_softmax(self.fc_critic(self.critic_body.forward(phi, action, q)), dim = -1).to(self.device) for phi, action, q in zip(data_phi, data_action, data_q)]
+        #probs = torch.tensor(0.5) * (torch.tensor(self.v_max_critic + self.v_min_critic)+torch.tensor((self.v_max_critic - self.v_min_critic))*torch.tanh(self.fc_critic(self.critic_body.forward(data_phi, data_action, data_q)))).to(self.device)
+        probs = torch.nn.functional.softmax(self.fc_critic(self.critic_body.forward(data_phi, data_action, data_q)), dim = -1)
+        #probs = self.fc_critic(self.critic_body.forward(data_phi, data_action, data_q))
         #probs = [torch.tanh(self.fc_critic(self.critic_body.forward(phi, action, q))).to(self.device) for phi, action, q in zip(data_phi, data_action, data_q)]
         #probs = [torch.nn.functional.relu(self.fc_critic(self.critic_body.forward(phi, action, q))).to(self.device) for phi, action, q in zip(data_phi, data_action, data_q)]
-        return torch.stack((probs), dim = 0)
-
+        #return torch.stack((probs), dim = 0)
+        return probs
     
-    def calculate_action_grad(self, data_phi, data_action, data_q): 
-        grads = []
-        for phi, action, q in zip(data_phi, data_action, data_q):
-            action.requires_grad_(True)
-            #z_j =  torch.tensor(0.5) * (torch.tensor(self.v_max_critic + self.v_min_critic)+torch.tensor((self.v_max_critic - self.v_min_critic))*torch.tanh(self.fc_critic(self.critic_body.forward(phi, action, q)))).to(self.device)
-            z_j =  torch.nn.functional.log_softmax(self.fc_critic(self.critic_body.forward(phi, action, q)), dim = -1).to(self.device)
-            #z_j =  torch.tanh(self.fc_critic(self.critic_body.forward(phi, action, q))).to(self.device)
-            #z_j =  torch.nn.functional.relu(self.fc_critic(self.critic_body.forward(phi, action, q))).to(self.device)
-            grad = torch.autograd.grad(z_j.mean(), action, retain_graph=True)
-            grads.append(grad)
-        grads=[torch.mul(x[0], -1) for x in grads]
-        return torch.stack((grads), dim = 0 )
+    def calculate_action_grad(self, z_j_data, data_action): 
+        
+       # data_phi = data_phi[:,None,:]
+        #data_action = data_action[:,None,:]
+        #data_q = data_q[:,None,:]
+        
+       # data_action.requires_grad_(True)
+        
+        #z_j_data = torch.nn.functional.log_softmax(self.fc_critic(self.critic_body.forward(data_phi, data_action, data_q)), dim = -1)
+        
+        # set input zero gradients
+        grad_zeros = torch.zeros_like(z_j_data)
+        
+        # calculate gradients
+        grads = torch.autograd.grad(z_j_data, data_action, grad_outputs=grad_zeros, retain_graph=True)
+        
+        # convert gradients from tuple to list
+        grads = torch.stack(grads, dim = 0 )
+        
+        # calculate negatvie mean of gradients
+        grads=torch.mul(grads[0], -1/self.num_atoms)
+        return grads
