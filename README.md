@@ -3,7 +3,7 @@ Udacity Deep Reinforcement Learning Nanodegree Program - implementation of Sampl
 
 
 ### Observations:
-- There's <b>Rerpot.ipynb</b> file for jupyter notebook execution where is described and showed the implementation of SDPG Agent
+- There's <b>InteractiveScript_for_Training&Testing.ipynb</b> file for jupyter notebook execution where is described and showed the implementation of SDPG Agent
 - The necessary python files are below. There's necessary to keep all these files in current workdir
 	* network_utils.py
 		*utilities for neural network
