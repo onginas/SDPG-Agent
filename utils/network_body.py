@@ -61,8 +61,8 @@ class CriticBody(nn.Module):
         self.linear2 = nn.Linear(hidden_units[1], num_atoms)
 
     def forward(self, state, action, noise):
-        #x1 =  self.function_unit(self.batch_norm(self.linear1(state)))
-        x0 =  self.function_unit(self.linear0(state))
+        x0 =  self.function_unit(self.batch_norm(self.linear0(state)))
+        #x0 =  self.function_unit(self.linear0(state))
         #x1 =  self.function_unit(self.linear1(x0))
         #print(action.shape)
         x2a = self.function_unit(self.linear2a(x0))
