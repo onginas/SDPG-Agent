@@ -18,7 +18,7 @@ Udacity Deep Reinforcement Learning Nanodegree Program - implementation of Sampl
 		* file with base function for each agent
 	
 	* SDPG_agent.py
-		*file with DDPG Agent with functions
+		*file with SDPG Agent with functions
 	
 	* randomProcess.py
 		*file with Orstein-Uhlenbeck process for adding noise
@@ -35,30 +35,32 @@ Udacity Deep Reinforcement Learning Nanodegree Program - implementation of Sampl
 - matplotlib
 
 ### Tested model
-LunarLander-v2 fro OpenAI Gym
+Reacher-v4 fro OpenAI Gym
 
 ### The hyperparameters:
 - the hyperpameters are in the file <b>SDPG_agent.py</b>.
-- The actual configuration of the hyperparameters is: 
+- The actual configuration of the hyperparameters is:
   - Learning Rate: 1e-4 (in both DNN)
-  - Batch Size: 180
-  - Replay Buffer: 1e6
+  - Batch Size: 256
+  - Replay Buffer: 2e5
   - Gamma: 0.99
   - Tau: 1e-3
   - Ornstein-Uhlenbeck noise parameters (0.15 theta and 0.2 sigma.)
   - warm-up: 4 (number of episodes before the target network is updated)
-  - num_atoms: 100
+  - number of atoms: 100
+  - priority beta start: 0.1
+  - priority beta start: 1
   
 - For the neural models:    
   - Actor    
-    - Hidden: (input, 128)  - function unit: ReLU
-    - Hidden: (128, 400)    - function unit: ReLU
-    - Output: (400, 2)      - function unit: TanH
+    - Hidden: (input, 256)  - function unit: ReLU
+    - Hidden: (256, 256)    - function unit: ReLU
+    - Output: (256, 2)      - function unit: ReLU
 
   - Critic
-    - Hidden: (input, 128)	                        - function unit: ReLU
+    - Hidden: (input, 128)	                                - function unit: ReLU
     - Hidden_2a: (128, 128)  				        - function unit: ReLU
 	- Hidden_2b: (action_size, 128)			        - function unit: ReLU
 	- Hidden_2c: (num_atoms, 128)			        - function unit: ReLU
-	- Hidden_2: (Hidden_2a + Hidden_2b + Hidden_2c) - function unit: ReLU
-    - Output: (128, num_atoms)                      - function unit: LogSoftmax
+	- Hidden_2: (Hidden_2a + Hidden_2b + Hidden_2c)         - function unit: ReLU
+    - Output: (128, num_atoms)                                  - function unit: Tanh
